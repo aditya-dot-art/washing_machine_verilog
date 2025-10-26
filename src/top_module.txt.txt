@@ -1,0 +1,40 @@
+module top_wash(
+    input clk, reset, start,
+    input [1:0] mode,
+    input pause, cancel,
+    input door_closed, water_level,
+    output cycle_done,
+    output [3:0] state_out
+);
+    wire start_fill, start_soak, start_wash, start_rinse, start_spin, start_dry, start_drain;
+    wire fill_done, soak_done, wash_done, rinse_done, spin_done, dry_done, drain_done;
+    wire water_ok, door_ok;
+    wire motor_wash, motor_spin, inlet_valve, heater, door_lock, drain_pump;
+   
+    beh_washing datapath(
+        .clk(clk), .reset(reset),
+        .start_fill(start_fill), .start_soak(start_soak), .start_wash(start_wash), 
+        .start_rinse(start_rinse), .start_dry(start_dry), .start_drain(start_drain),
+        .start_spin(start_spin), 
+        .fill_done(fill_done), .drain_done(drain_done),
+        .soak_done(soak_done), .wash_done(wash_done), .rinse_done(rinse_done),
+        .spin_done(spin_done), .dry_done(dry_done),
+        .door_ok(door_ok), .water_ok(water_ok)
+    );
+              
+    con_wash controller(
+        .clk(clk), .reset(reset), .start(start), 
+        .mode(mode), .pause(pause), .cancel(cancel),
+        .fill_done(fill_done), .soak_done(soak_done), .wash_done(wash_done), 
+        .rinse_done(rinse_done), .spin_done(spin_done), .dry_done(dry_done),
+        .drain_done(drain_done), .door_ok(door_ok), .water_ok(water_ok),
+        .start_fill(start_fill), .start_soak(start_soak), .start_wash(start_wash), 
+        .start_rinse(start_rinse), .start_dry(start_dry), .start_drain(start_drain),
+        .start_spin(start_spin), 
+        .motor_wash(motor_wash), .inlet_valve(inlet_valve),
+        .motor_spin(motor_spin), .heater(heater),
+        .door_lock(door_lock), .cycle_done(cycle_done),
+        .drain_pump(drain_pump),
+        .state_out(state_out)
+    );
+endmodule

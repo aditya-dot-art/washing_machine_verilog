@@ -1,0 +1,98 @@
+`timescale 1ns / 1ps
+
+module tb_washing_machine;
+
+    reg clk, reset, start, pause, cancel;
+    reg [1:0] mode;
+    reg door_closed, water_level;
+    wire cycle_done;
+    wire [3:0] state_out;
+
+    // Instantiate top_wash
+    top_wash uut (
+        .clk(clk), .reset(reset), .start(start),
+        .mode(mode), .pause(pause), .cancel(cancel),
+        .door_closed(door_closed), .water_level(water_level),
+        .cycle_done(cycle_done), .state_out(state_out)
+    );
+
+    // Clock generation (10ns period -> 100 MHz)
+    initial clk = 0;
+    always #5 clk = ~clk;
+
+    initial begin
+        // Initialize
+        reset = 1; start = 0; pause = 0; cancel = 0;
+        door_closed = 1; water_level = 0;
+        mode = 2'b01;
+
+        $display("Time | State | Action");
+
+        // 1. Release reset
+        #20 reset = 0;
+
+        // 2. Start the machine
+        #10 start = 1;
+        #10 start = 0;
+
+        // 3. FILL Phase
+        wait(state_out == 4'b0001);
+        $display("%0t | %d | Entered FILL state.", $time, state_out);
+        water_level = 1; // Trigger fill_done
+        #10 water_level = 0;
+
+        // 4. SOAK Phase
+        wait(state_out == 4'b0010);
+        $display("%0t | %d | Entered SOAK state.", $time, state_out);
+        // Wait for soak timer (mode 2'b01: 10 cycles)
+        repeat (10) @(posedge clk);
+
+        // 5. WASH Phase
+        wait(state_out == 4'b0011);
+        $display("%0t | %d | Entered WASH state.", $time, state_out);
+        // PAUSE test
+        pause = 1;
+        @(posedge clk);
+        $display("%0t | %d | *** PAUSED ***", $time, state_out);
+        #50;
+        pause = 0;
+        @(posedge clk);
+        $display("%0t | %d | *** RESUMED ***", $time, state_out);
+        // Wait for remaining wash cycles
+        repeat (15) @(posedge clk);
+
+        // 6. DRAIN Phase
+        wait(state_out == 4'b1010);
+        $display("%0t | %d | Entered DRAIN state.", $time, state_out);
+        repeat (10) @(posedge clk);
+
+        // 7. RINSE Phase
+        wait(state_out == 4'b0100);
+        $display("%0t | %d | Entered RINSE state.", $time, state_out);
+        repeat (20) @(posedge clk);
+
+        // 8. SPIN Phase
+        wait(state_out == 4'b0101);
+        $display("%0t | %d | Entered SPIN state.", $time, state_out);
+        repeat (20) @(posedge clk);
+
+        // 9. DRY Phase
+        wait(state_out == 4'b0110);
+        $display("%0t | %d | Entered DRY state.", $time, state_out);
+        repeat (20) @(posedge clk);
+
+        // 10. END Phase
+        wait(state_out == 4'b0111);
+        $display("%0t | %d | CYCLE COMPLETE. cycle_done=%b", $time, state_out, cycle_done);
+
+        // 11. Safety Test (door opens during END)
+        door_closed = 0; #50; door_closed = 1;
+
+        // 12. Return to IDLE
+        start = 0;
+        wait(state_out == 4'b0000);
+        $display("%0t | %d | Returned to IDLE. Test done.", $time, state_out);
+
+        $finish;
+    end
+endmodule

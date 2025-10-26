@@ -1,0 +1,97 @@
+module beh_washing(
+   input clk, reset,
+   input start_fill, start_soak,
+   input start_wash, start_rinse,
+   input start_dry, start_drain, start_spin,
+   input [1:0] mode,
+   input door_closed, water_level,
+   output reg fill_done, soak_done,
+   output reg wash_done, rinse_done,
+   output reg dry_done, spin_done,
+   output reg drain_done,
+   output reg door_ok, water_ok
+);
+    reg [7:0] timer_fill, timer_drain, timer_soak, timer_wash, timer_rinse, timer_dry, timer_spin;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            timer_fill  <= 0; timer_soak  <= 0; timer_wash  <= 0;
+            timer_rinse <= 0; timer_dry   <= 0; timer_spin  <= 0;
+            timer_drain <= 0; drain_done <= 0;
+            fill_done <= 0; soak_done <= 0;
+            wash_done <= 0; rinse_done <= 0;
+            dry_done <= 0; spin_done <= 0;
+        end else begin
+            // default: one-cycle pulses
+            fill_done  <= 0; soak_done  <= 0;
+            wash_done  <= 0; rinse_done <= 0;
+            dry_done   <= 0; spin_done  <= 0;
+
+            // ===== FILL =====
+            if (start_fill) begin
+                if (water_level) fill_done <= 1;
+            end
+
+            // ===== SOAK =====
+            if (start_soak) begin
+                timer_soak <= timer_soak + 1;
+                if ((mode == 2'b01 && timer_soak >= 8'd10) ||
+                    (mode == 2'b10 && timer_soak >= 8'd20)) begin
+                    soak_done <= 1;
+                    timer_soak <= 0;
+                end
+            end else timer_soak <= 0;
+
+            // ===== WASH =====
+            if (start_wash) begin
+                timer_wash <= timer_wash + 1;
+                if ((mode == 2'b00 && timer_wash >= 8'd10) ||
+                    (mode == 2'b01 && timer_wash >= 8'd15) ||
+                    (mode == 2'b10 && timer_wash >= 8'd20)) begin
+                    wash_done <= 1;
+                    timer_wash <= 0;
+                end
+            end else timer_wash <= 0;
+
+            // ===== RINSE =====
+            if (start_rinse) begin
+                timer_rinse <= timer_rinse + 1;         
+                if (timer_rinse >= 8'd20) begin
+                    rinse_done <= 1;
+                    timer_rinse <= 0;
+                end
+            end else timer_rinse <= 0;
+              
+            // ===== DRAIN  =====
+            if (start_drain) begin
+                timer_drain <= timer_drain + 1;
+                if (timer_drain >= 8'd10) begin  
+                    drain_done <= 1;
+                    timer_drain <= 0;
+                end
+            end else timer_drain <= 0;
+
+            // ===== SPIN =====
+            if (start_spin) begin
+                timer_spin <= timer_spin + 1;
+                if (timer_spin >= 8'd20) begin
+                    spin_done <= 1;
+                    timer_spin <= 0;
+                end
+            end else timer_spin <= 0;
+
+            // ===== DRY =====
+            if (start_dry) begin
+                timer_dry <= timer_dry + 1;
+                if (timer_dry >= 8'd20) begin
+                    dry_done <= 1;
+                    timer_dry <= 0;
+                end
+            end else timer_dry <= 0;
+
+            // ===== Sensors passthrough =====
+            door_ok <= door_closed;
+            water_ok <= water_level;
+        end
+    end
+endmodule

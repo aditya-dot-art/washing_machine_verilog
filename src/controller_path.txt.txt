@@ -1,0 +1,129 @@
+module con_wash(
+    input clk, reset, start,
+    input [1:0] mode,
+    input pause, cancel,
+    input fill_done, soak_done,
+    input wash_done, rinse_done,
+    input dry_done, spin_done,
+    input door_ok, water_ok, drain_done,
+    output reg start_fill, start_soak,
+    output reg drain_pump, 
+    output reg start_wash, start_rinse,
+    output reg start_dry, start_spin, start_drain,
+    output reg motor_wash, inlet_valve,
+    output reg motor_spin, heater,
+    output reg door_lock, cycle_done,
+    output reg [3:0] state_out
+);
+    parameter IDLE  = 4'b0000,
+              FILL  = 4'b0001,
+              SOAK  = 4'b0010,
+              WASH  = 4'b0011,
+              RINSE = 4'b0100,
+              SPIN  = 4'b0101,
+              DRY   = 4'b0110,
+              END   = 4'b0111,
+              DRAIN = 4'b1010,
+              PAUSE = 4'b1000,
+              ERROR = 4'b1001;
+
+    reg[3:0] state, n_state;
+    reg[3:0] saved_state; 
+
+    // sequential state register
+    always @(posedge clk or posedge reset) begin
+        if (reset) state <= IDLE;
+        else state <= n_state;
+    end
+
+    // combinational next-state + outputs
+    always @(*) begin
+        // defaults
+        start_fill  = 0; start_soak  = 0; start_wash  = 0;
+        start_rinse = 0; start_dry   = 0; start_spin  = 0; start_drain = 0;
+        inlet_valve  = 0; motor_wash = 0; motor_spin = 0;
+        heater = 0; door_lock = 0; cycle_done = 0; drain_pump = 0;
+        n_state = state;
+        state_out = state;
+
+        case (state)
+            IDLE: begin
+                if (start && door_ok) n_state = FILL;
+            end
+
+            FILL: begin
+                door_lock = 1; inlet_valve = 1; start_fill = 1;
+                if (!door_ok) n_state = ERROR;
+                else if (fill_done) begin
+                    if (mode == 2'b00) n_state = WASH;
+                    else n_state = SOAK;
+                end
+            end
+
+            SOAK: begin
+                door_lock = 1;
+                heater = (mode == 2'b10);
+                start_soak = 1;
+                if (soak_done) n_state = WASH;
+            end
+
+            WASH: begin
+                door_lock = 1; motor_wash = 1; start_wash = 1;
+                if (!door_ok) n_state = ERROR;
+                else if (wash_done) n_state = DRAIN;
+            end
+            
+            DRAIN: begin
+                door_lock = 1;
+                drain_pump = 1; start_drain = 1;
+                if (drain_done) n_state = RINSE;
+            end
+
+            RINSE: begin
+                door_lock = 1; start_rinse = 1; motor_wash = 1;
+                if (rinse_done) n_state = SPIN;
+            end
+
+            SPIN: begin
+                door_lock = 1; motor_spin = 1; start_spin = 1;
+                if (spin_done) n_state = DRY;
+            end
+
+            DRY: begin
+                door_lock = 1; motor_spin = 1; start_dry = 1;
+                if (dry_done) begin
+                    cycle_done = 1;
+                    n_state = END;
+                end
+            end
+
+            END: begin
+                door_lock = 0;
+                cycle_done = 1;
+                if (!start) n_state = IDLE;
+            end
+
+            PAUSE: begin
+                door_lock = 1;
+                if (!pause) n_state = saved_state;
+            end
+
+            ERROR: begin
+                door_lock = 0;
+                cycle_done = 0;
+                n_state = ERROR;
+            end
+
+            default: n_state = IDLE;
+        endcase
+
+        // overrides
+        if (cancel) n_state = END;
+        else if (pause && state != IDLE && state != END && state != PAUSE) begin
+            saved_state = state;
+            n_state = PAUSE;
+        end 
+        if (!door_ok && (state != IDLE) && (state != END))
+            n_state = ERROR;
+    end
+endmodule
